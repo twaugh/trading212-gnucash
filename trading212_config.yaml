@@ -1,4 +1,4 @@
-# Trading212 to GnuCash Converter Configuration
+# Trading212 to GnuCash Multi-Split Converter Configuration
 # Edit this file to customize your ticker symbols and account mappings
 
 # Map Trading212 ticker symbols to Yahoo Finance symbols
@@ -9,15 +9,9 @@ ticker_map:
   AAPL: AAPL        # Apple Inc.
   GOOGL: GOOGL      # Alphabet Inc.
 
-# Map ticker symbols to GnuCash account paths for shares
-account_map:
-  ORA: "Assets:Investments:Brokerage Account:Orange"
-  VOD: "Assets:Investments:Brokerage Account:Vodafone"
-  MSFT: "Assets:Investments:Brokerage Account:Microsoft"
-  AAPL: "Assets:Investments:Brokerage Account:Apple"
-  GOOGL: "Assets:Investments:Brokerage Account:Google"
-
 # GnuCash accounts for fees and taxes
+# Note: For share transactions, Transfer Account uses company name directly (e.g., "Microsoft Corporation")
+# Note: Source account (where money comes from/goes to) is configured during GnuCash import
 expense_accounts:
-  stamp_duty: "Expenses:Investment Taxes"
   conversion_fee: "Expenses:Currency Conversion Fees"
+  french_tax: "Expenses:French Transaction Tax"

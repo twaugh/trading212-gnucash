@@ -3,7 +3,7 @@
 Trading212 CSV to GnuCash Converter
 
 A modern Python tool to convert Trading212 CSV exports into a format suitable for GnuCash import.
-The tool splits transactions into separate rows for shares, stamp duty, and conversion fees.
+The tool creates multi-split transactions with separate entries for shares, fees, and taxes.
 """
 
 import argparse
@@ -36,14 +36,10 @@ class Trading212Converter:
                 "VOD": "VOD.L",
                 "MSFT": "MSFT"
             },
-            "account_map": {
-                "ORA": "Assets:Investments:Brokerage Account:ORA",
-                "VOD": "Assets:Investments:Brokerage Account:VOD",
-                "MSFT": "Assets:Investments:Brokerage Account:MSFT"
-            },
+
             "expense_accounts": {
-                "stamp_duty": "Expenses:Investment Taxes",
-                "conversion_fee": "Expenses:Currency Conversion Fees"
+                "conversion_fee": "Expenses:Currency Conversion Fees",
+                "french_tax": "Expenses:French Transaction Tax"
             }
         }
         
@@ -78,8 +74,11 @@ class Trading212Converter:
                 headers = reader.fieldnames
                 
                 required_headers = [
-                    'Time', 'Ticker', 'Total', 'Stamp duty reserve tax',
-                    'Currency conversion fee', 'No. of shares'
+                    'Action', 'Time', 'ISIN', 'Ticker', 'Name', 'Notes', 'ID',
+                    'No. of shares', 'Price / share', 'Currency (Price / share)',
+                    'Exchange rate', 'Currency (Result)', 'Total', 'Currency (Total)',
+                    'Currency conversion fee', 'Currency (Currency conversion fee)',
+                    'French transaction tax', 'Currency (French transaction tax)'
                 ]
                 
                 missing_headers = [h for h in required_headers if h not in headers]
@@ -108,8 +107,8 @@ class Trading212Converter:
             return False
             
         try:
-            # Define the headers for the new, transformed CSV
-            new_headers = ['Date', 'Description', 'Account', 'Amount', 'Shares', 'Ticker']
+            # Define headers for GnuCash multi-split import
+            new_headers = ['Date', 'Description', 'Transfer Account', 'Amount', 'Memo', 'Price', 'Transaction Commodity']
             
             with open(input_file, 'r', newline='') as infile, \
                  open(output_file, 'w', newline='') as outfile:
@@ -138,64 +137,111 @@ class Trading212Converter:
             return False
     
     def _process_row(self, row: Dict, writer: csv.DictWriter) -> None:
-        """Process a single row from the Trading212 CSV."""
+        """Process a single row from the Trading212 CSV into multi-split format."""
         # Get data from original row
+        action = row['Action']
         time = row['Time']
+        isin = row['ISIN']
         ticker = row['Ticker']
+        name = row['Name']
         
         try:
-            total = float(row['Total'])
-            stamp_duty = float(row['Stamp duty reserve tax'])
-            conversion_fee = float(row['Currency conversion fee'])
-            num_shares = float(row['No. of shares'])
+            total = float(row['Total']) if row['Total'] else 0.0
+            conversion_fee = float(row['Currency conversion fee']) if row['Currency conversion fee'] else 0.0
+            num_shares = float(row['No. of shares']) if row['No. of shares'] else 0.0
+            price_per_share_original = float(row['Price / share']) if row['Price / share'] else 0.0
+            exchange_rate = float(row['Exchange rate']) if row['Exchange rate'] else 1.0
+            french_tax = float(row['French transaction tax']) if row.get('French transaction tax') else 0.0
         except ValueError as e:
             raise ValueError(f"Invalid numeric value in row: {e}")
         
+        # Get currency information
+        price_currency = row.get('Currency (Price / share)', '')
+        total_currency = row.get('Currency (Total)', '')
+        
+        # Calculate GBP price per share
+        # If we have exchange rate information and the price is not already in GBP
+        if price_currency and price_currency != 'GBP' and exchange_rate != 0:
+            # Convert original price to GBP using exchange rate
+            price_per_share_gbp = price_per_share_original / exchange_rate
+        elif total_currency == 'GBP' and num_shares != 0:
+            # Use the total amount method as fallback (total should be in GBP)
+            price_per_share_gbp = abs(total) / num_shares
+        else:
+            # Assume price is already in GBP or no conversion needed
+            price_per_share_gbp = price_per_share_original
+        
+        # Skip non-trading actions if needed
+        if action not in ['Market buy', 'Market sell', 'Limit buy', 'Limit sell']:
+            self.logger.debug(f"Skipping action: {action}")
+            return
+        
         # Perform lookups
         yahoo_ticker = self.config['ticker_map'].get(ticker, ticker)
-        account_path = self.config['account_map'].get(ticker, f"Assets:Investments:Brokerage Account:{ticker}")
+        # Use just the company name for Transfer Account (GnuCash will handle the full path)
+        company_name = name if name else ticker
         
         if ticker not in self.config['ticker_map']:
             self.logger.warning(f"No ticker mapping found for {ticker}, using default")
-        if ticker not in self.config['account_map']:
-            self.logger.warning(f"No account mapping found for {ticker}, using default")
         
         # Calculate the net amount for the shares
-        net_shares_amount = total - stamp_duty - conversion_fee
+        net_shares_amount = total - conversion_fee - french_tax
         
-        # Write the transformed rows to the new CSV
+        # Create transaction description (shared by all splits)
+        description = f"{action} {num_shares:.6f} shares of {name} ({ticker})" if name else f"{action} {num_shares:.6f} shares of {ticker}"
         
-        # Row for the shares
-        writer.writerow({
-            'Date': time,
-            'Description': ticker,
-            'Account': account_path,
-            'Amount': f"{net_shares_amount:.2f}",
-            'Shares': f"{num_shares:.6f}",
-            'Ticker': yahoo_ticker
-        })
+        # Write multi-split transaction rows
+        # All splits share the same date and description, but different Transfer Accounts
         
-        # Row for the stamp duty fee (only if non-zero)
-        if stamp_duty != 0:
+        # Split 1: Main transaction (buy/sell shares)
+        # For multi-split: Transfer Account is the destination (source account set during GnuCash import)
+        if action in ['Market buy', 'Limit buy']:
+            # Buy: Positive number of shares being purchased
             writer.writerow({
                 'Date': time,
-                'Description': f'{ticker} SDRT',
-                'Account': self.config['expense_accounts']['stamp_duty'],
-                'Amount': f"{stamp_duty:.2f}",
-                'Shares': '',
-                'Ticker': ''
+                'Description': description,
+                'Transfer Account': company_name,
+                'Amount': f"{num_shares:.6f}",
+                'Memo': f"Purchase of {num_shares:.6f} shares @ {yahoo_ticker}",
+                'Price': f"{price_per_share_gbp:.4f}",
+                'Transaction Commodity': yahoo_ticker
+            })
+        else:  # Market sell, Limit sell
+            # Sell: Negative number of shares being sold
+            writer.writerow({
+                'Date': time,
+                'Description': description,
+                'Transfer Account': company_name,
+                'Amount': f"-{num_shares:.6f}",
+                'Memo': f"Sale of {num_shares:.6f} shares @ {yahoo_ticker}",
+                'Price': f"{price_per_share_gbp:.4f}",
+                'Transaction Commodity': yahoo_ticker
             })
         
-        # Row for the conversion fee (only if non-zero)
+        # Split 2: Conversion fee (only if non-zero)
         if conversion_fee != 0:
             writer.writerow({
                 'Date': time,
-                'Description': f'{ticker} Conv Fee',
-                'Account': self.config['expense_accounts']['conversion_fee'],
-                'Amount': f"{conversion_fee:.2f}",
-                'Shares': '',
-                'Ticker': ''
+                'Description': description,
+                'Transfer Account': self.config['expense_accounts']['conversion_fee'],
+                'Amount': f"-{abs(conversion_fee):.2f}",  # Negative amount for expense
+                'Memo': f"Currency conversion fee for {ticker}",
+                'Price': "",  # No price for expense transactions
+                'Transaction Commodity': ""
             })
+        
+        # Split 3: French transaction tax (only if non-zero)
+        if french_tax != 0:
+            writer.writerow({
+                'Date': time,
+                'Description': description,
+                'Transfer Account': self.config['expense_accounts']['french_tax'],
+                'Amount': f"-{abs(french_tax):.2f}",  # Negative amount for expense
+                'Memo': f"French transaction tax for {ticker}",
+                'Price': "",  # No price for expense transactions
+                'Transaction Commodity': ""
+            })
+
 
 
 def setup_logging(verbose: bool = False) -> None:
@@ -210,7 +256,7 @@ def setup_logging(verbose: bool = False) -> None:
 
 def create_sample_config(config_path: Path) -> None:
     """Create a sample configuration file."""
-    sample_config_yaml = """# Trading212 to GnuCash Converter Configuration
+    sample_config_yaml = """# Trading212 to GnuCash Multi-Split Converter Configuration
 # Edit this file to customize your ticker symbols and account mappings
 
 # Map Trading212 ticker symbols to Yahoo Finance symbols
@@ -221,18 +267,12 @@ ticker_map:
   AAPL: AAPL        # Apple Inc.
   GOOGL: GOOGL      # Alphabet Inc.
 
-# Map ticker symbols to GnuCash account paths for shares
-account_map:
-  ORA: "Assets:Investments:Brokerage Account:Orange"
-  VOD: "Assets:Investments:Brokerage Account:Vodafone"
-  MSFT: "Assets:Investments:Brokerage Account:Microsoft"
-  AAPL: "Assets:Investments:Brokerage Account:Apple"
-  GOOGL: "Assets:Investments:Brokerage Account:Google"
-
 # GnuCash accounts for fees and taxes
+# Note: For share transactions, Transfer Account uses company name directly (e.g., "Microsoft Corporation")
+# Note: Source account (where money comes from/goes to) is configured during GnuCash import
 expense_accounts:
-  stamp_duty: "Expenses:Investment Taxes"
   conversion_fee: "Expenses:Currency Conversion Fees"
+  french_tax: "Expenses:French Transaction Tax"
 """
     
     with open(config_path, 'w') as f:
@@ -240,18 +280,25 @@ expense_accounts:
     
     print(f"Sample configuration file created at: {config_path}")
     print("Edit this file to customize your ticker and account mappings.")
+    print("The source account (bank/cash account) will be configured during GnuCash import.")
 
 
 def main():
     """Main entry point for the CLI application."""
     parser = argparse.ArgumentParser(
-        description="Convert Trading212 CSV exports to GnuCash format",
+        description="Convert Trading212 CSV exports to GnuCash multi-split format",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   %(prog)s input.csv output.csv
   %(prog)s input.csv output.csv --config my_config.yaml
   %(prog)s --create-config
+
+This tool creates multi-split transactions suitable for GnuCash import.
+Each Trading212 transaction becomes a multi-split transaction with:
+- Money transfer between your source account and investment accounts
+- Separate splits for fees and taxes
+The source account is configured during the GnuCash import process.
         """
     )
     

@@ -1,11 +1,14 @@
 # Trading212 CSV to GnuCash Converter
 
-A modern Python tool that converts Trading212 CSV export files into a format suitable for importing into GnuCash. The converter splits each transaction into separate entries for shares, stamp duty reserve tax, and currency conversion fees.
+A modern Python tool that converts Trading212 CSV export files into a format suitable for importing into GnuCash. The converter creates multi-split transactions with separate entries for shares, currency conversion fees, and transaction taxes, with proper GBP currency conversion.
 
 ## Features
 
 - 🚀 **Modern CLI Interface** - Easy-to-use command-line interface with helpful options
 - ⚙️ **Configurable Mappings** - Customize ticker symbols and account mappings via YAML config
+- 💱 **Automatic Currency Conversion** - Converts prices to GBP using Trading212's exchange rates
+- 📊 **GnuCash Stock Import Ready** - Includes Price and Transaction Commodity columns for proper stock transactions
+- 🔄 **Multi-Split Transactions** - Creates proper multi-split entries for shares, fees, and taxes
 - 🛡️ **Error Handling** - Robust validation and error reporting
 - 📝 **Detailed Logging** - Comprehensive logging with optional verbose mode
 - 🔧 **Minimal Dependencies** - Only requires PyYAML (Python 3.7+)
@@ -46,9 +49,9 @@ python3 trading212_converter.py input.csv output.csv --verbose
 
 ## Configuration
 
-The tool uses a YAML configuration file to map Trading212 ticker symbols to:
-- Yahoo Finance ticker symbols (for portfolio tracking)
-- GnuCash account paths
+The tool uses a YAML configuration file to:
+- Map Trading212 ticker symbols to Yahoo Finance symbols (for portfolio tracking)
+- Configure expense accounts for fees and taxes
 
 ### Sample Configuration (`trading212_config.yaml`)
 
@@ -64,55 +67,107 @@ ticker_map:
   AAPL: AAPL        # Apple Inc.
   GOOGL: GOOGL      # Alphabet Inc.
 
-# Map ticker symbols to GnuCash account paths for shares
-account_map:
-  ORA: "Assets:Investments:Brokerage Account:Orange"
-  VOD: "Assets:Investments:Brokerage Account:Vodafone"
-  MSFT: "Assets:Investments:Brokerage Account:Microsoft"
-  AAPL: "Assets:Investments:Brokerage Account:Apple"
-  GOOGL: "Assets:Investments:Brokerage Account:Google"
-
 # GnuCash accounts for fees and taxes
+# Note: For share transactions, Transfer Account uses company name directly (e.g., "Microsoft Corporation")
+# Note: Source account (where money comes from/goes to) is configured during GnuCash import
 expense_accounts:
-  stamp_duty: "Expenses:Investment Taxes"
   conversion_fee: "Expenses:Currency Conversion Fees"
+  french_tax: "Expenses:French Transaction Tax"
 ```
 
 ### Configuration Options
 
 - **`ticker_map`**: Maps Trading212 ticker symbols to Yahoo Finance symbols
-- **`account_map`**: Maps ticker symbols to GnuCash account paths for the shares
 - **`expense_accounts`**: Defines accounts for fees and taxes
+
+**Note**: For share transactions, the Transfer Account uses the company name directly (e.g., "Microsoft Corporation"). GnuCash will map this to the appropriate account during import.
 
 ## Input Format
 
-The tool expects Trading212 CSV exports with the following required columns:
+The tool expects Trading212 CSV exports with the following columns:
 
+- `Action` - Transaction type (Market buy, Market sell, etc.)
 - `Time` - Transaction timestamp
+- `ISIN` - International Securities Identification Number
 - `Ticker` - Stock ticker symbol
-- `Total` - Total transaction amount
-- `Stamp duty reserve tax` - SDRT amount
-- `Currency conversion fee` - Conversion fee amount
+- `Name` - Full company name
+- `Notes` - Additional notes
+- `ID` - Transaction ID
 - `No. of shares` - Number of shares traded
+- `Price / share` - Price per share (in original currency)
+- `Currency (Price / share)` - Currency of share price
+- `Exchange rate` - Exchange rate used for conversion
+- `Currency (Result)` - Result currency
+- `Total` - Total transaction amount (in GBP)
+- `Currency (Total)` - Currency of total amount
+- `Currency conversion fee` - Conversion fee amount
+- `Currency (Currency conversion fee)` - Currency of conversion fee
+- `French transaction tax` - French transaction tax amount
+- `Currency (French transaction tax)` - Currency of French tax
 
 ## Output Format
 
-The converter creates a GnuCash-compatible CSV with these columns:
+The converter creates a GnuCash-compatible CSV for multi-split import with these columns:
 
 - `Date` - Transaction date
-- `Description` - Transaction description
-- `Account` - GnuCash account path
-- `Amount` - Transaction amount
-- `Shares` - Number of shares (for share transactions only)
-- `Ticker` - Yahoo Finance ticker symbol (for share transactions only)
+- `Description` - Transaction description (shared by all splits)
+- `Transfer Account` - Destination account for each split
+- `Amount` - Transaction amount or share quantity
+- `Memo` - Additional details for each split
+- `Price` - Price per share in GBP (for stock transactions)
+- `Transaction Commodity` - Stock symbol (for stock transactions)
+
+### Currency Conversion
+
+The tool automatically converts prices to GBP using Trading212's exchange rate data:
+
+- **Method 1**: Uses `Exchange rate` field when available: `GBP Price = Original Price ÷ Exchange Rate`
+- **Method 2**: Calculates from total: `GBP Price = abs(Total in GBP) ÷ Number of Shares`
+- **Fallback**: Uses original price if no conversion data available
 
 ### Output Structure
 
-Each Trading212 transaction becomes multiple GnuCash entries:
+Each Trading212 transaction becomes a multi-split transaction with separate splits for:
 
-1. **Share Transaction** - The net amount for the actual shares
-2. **Stamp Duty** - Separate entry for SDRT (if non-zero)
-3. **Conversion Fee** - Separate entry for currency conversion (if non-zero)
+1. **Share Transaction** - The number of shares traded
+   - **Buy orders**: Positive share quantity (shares acquired)
+   - **Sell orders**: Negative share quantity (shares sold)
+   - **Price**: Converted to GBP using exchange rate
+   - **Transaction Commodity**: Yahoo Finance ticker symbol
+
+2. **Conversion Fee** - Separate split for currency conversion (negative amount, if non-zero)
+3. **French Transaction Tax** - Separate split for French tax (negative amount, if non-zero)
+
+All splits share the same `Date` and `Description`, creating a single multi-split transaction.
+
+### GnuCash Multi-Split Import
+
+The output CSV is designed for GnuCash's stock transaction import feature:
+- **Transfer Account** specifies the destination for each split
+- **Amount** column contains share quantities for stock transactions, negative amounts for fees
+- **Price** column contains GBP price per share for proper stock valuation
+- **Transaction Commodity** identifies the stock symbol
+- **Memo** provides additional context for each split
+
+During GnuCash import:
+1. Set the source account (e.g., your checking account) in the Account field
+2. GnuCash will automatically create multi-split transactions
+3. Stock transactions will use the Price and Transaction Commodity for proper accounting
+4. Fee transactions will be recorded as expenses
+
+### Sample Output
+
+```csv
+Date,Description,Transfer Account,Amount,Memo,Price,Transaction Commodity
+2025-08-25 07:00:28.695,Market buy 0.905106 shares of Orange (ORA),Orange,0.905106,Purchase of 0.905106 shares @ ORAN.PA,14.5899,ORAN.PA
+2025-08-25 07:00:28.695,Market buy 0.905106 shares of Orange (ORA),Expenses:Currency Conversion Fees,-0.02,Currency conversion fee for ORA,,
+2025-08-25 07:00:28.695,Market buy 0.905106 shares of Orange (ORA),Expenses:French Transaction Tax,-0.05,French transaction tax for ORA,,
+```
+
+This creates one multi-split transaction with three splits:
+- **Share purchase**: 0.905106 shares at 14.5899 GBP per share
+- **Conversion fee**: -0.02 GBP expense
+- **French tax**: -0.05 GBP expense
 
 ## Command Line Options
 
@@ -201,6 +256,22 @@ python3 trading212_converter.py trading212_export.csv gnucash_import.csv --confi
 python3 trading212_converter.py trading212_export.csv gnucash_import.csv --verbose
 ```
 
+## Currency Conversion Details
+
+The converter handles multiple currency scenarios:
+
+### EUR to GBP Example
+- **Original price**: 12.47 EUR per share
+- **Exchange rate**: 0.8547 (EUR to GBP)
+- **GBP price**: 12.47 ÷ 0.8547 = 14.5899 GBP per share
+
+### USD to GBP Example
+- **Original price**: 150.00 USD per share  
+- **Exchange rate**: 0.7850 (USD to GBP)
+- **GBP price**: 150.00 ÷ 0.7850 = 191.08 GBP per share
+
+The tool automatically detects the source currency and applies the appropriate conversion.
+
 ## Troubleshooting
 
 ### Common Issues
@@ -217,6 +288,10 @@ python3 trading212_converter.py trading212_export.csv gnucash_import.csv --verbo
    - Validate YAML syntax in your config file
    - Ensure all required sections are present
 
+4. **Currency Conversion Issues**
+   - Verify that Exchange rate column contains valid numbers
+   - Check Currency columns for correct currency codes
+
 ### Getting Help
 
 Run with `--verbose` flag to see detailed processing information:
@@ -228,6 +303,7 @@ python3 trading212_converter.py input.csv output.csv --verbose
 This will show:
 - Configuration loading status
 - Processing progress
+- Currency conversion details
 - Warnings for missing mappings
 - Detailed error messages
 
