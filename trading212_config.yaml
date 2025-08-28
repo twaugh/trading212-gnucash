@@ -1,0 +1,23 @@
+# Trading212 to GnuCash Converter Configuration
+# Edit this file to customize your ticker symbols and account mappings
+
+# Map Trading212 ticker symbols to Yahoo Finance symbols
+ticker_map:
+  ORA: ORAN.PA      # Orange SA
+  VOD: VOD.L        # Vodafone Group PLC
+  MSFT: MSFT        # Microsoft Corporation
+  AAPL: AAPL        # Apple Inc.
+  GOOGL: GOOGL      # Alphabet Inc.
+
+# Map ticker symbols to GnuCash account paths for shares
+account_map:
+  ORA: "Assets:Investments:Brokerage Account:Orange"
+  VOD: "Assets:Investments:Brokerage Account:Vodafone"
+  MSFT: "Assets:Investments:Brokerage Account:Microsoft"
+  AAPL: "Assets:Investments:Brokerage Account:Apple"
+  GOOGL: "Assets:Investments:Brokerage Account:Google"
+
+# GnuCash accounts for fees and taxes
+expense_accounts:
+  stamp_duty: "Expenses:Investment Taxes"
+  conversion_fee: "Expenses:Currency Conversion Fees"
