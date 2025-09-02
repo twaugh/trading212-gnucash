@@ -160,7 +160,7 @@ class Trading212Converter:
                 "Account",
                 "Amount",
                 "Memo",
-                "Price",
+                "Value",
                 "Transaction Commodity",
             ]
 
@@ -301,7 +301,7 @@ class Trading212Converter:
                     "Account": company_name,
                     "Amount": f"{num_shares:.6f}",
                     "Memo": f"Purchase of {num_shares:.6f} shares @ {yahoo_ticker}",
-                    "Price": f"{price_per_share_gbp:.4f}",
+                    "Value": f"{abs(net_shares_amount):.2f}",
                     "Transaction Commodity": yahoo_ticker,
                 }
             )
@@ -315,7 +315,7 @@ class Trading212Converter:
                     "Account": company_name,
                     "Amount": f"-{num_shares:.6f}",
                     "Memo": f"Sale of {num_shares:.6f} shares @ {yahoo_ticker}",
-                    "Price": f"{price_per_share_gbp:.4f}",
+                    "Value": f"{abs(net_shares_amount):.2f}",
                     "Transaction Commodity": yahoo_ticker,
                 }
             )
@@ -328,9 +328,9 @@ class Trading212Converter:
                     "Description": description,
                     "Action": action,  # Same action as the main transaction
                     "Account": self.config["expense_accounts"]["conversion_fee"],
-                    "Amount": f"-{abs(conversion_fee):.2f}",  # Negative amount for expense
+                    "Amount": "",  # Empty amount for expense transactions
                     "Memo": f"Currency conversion fee for {ticker}",
-                    "Price": "",  # No price for expense transactions
+                    "Value": f"{abs(conversion_fee):.2f}",  # Positive value for expense cost
                     "Transaction Commodity": "",
                 }
             )
@@ -355,9 +355,9 @@ class Trading212Converter:
                     "Description": description,
                     "Action": action,  # Same action as the main transaction
                     "Account": tax_account,
-                    "Amount": f"-{abs(transaction_tax):.2f}",  # Negative amount for expense
+                    "Amount": "",  # Empty amount for expense transactions
                     "Memo": tax_memo,
-                    "Price": "",  # No price for expense transactions
+                    "Value": f"{abs(transaction_tax):.2f}",  # Positive value for expense cost
                     "Transaction Commodity": "",
                 }
             )
@@ -394,7 +394,7 @@ class Trading212Converter:
                     if transaction_id
                     else "Trading212 deposit"
                 ),
-                "Price": "",  # No price for deposit transactions
+                "Value": f"{abs(total):.2f}",  # Value is the deposit amount
                 "Transaction Commodity": "",
             }
         )
@@ -431,7 +431,7 @@ class Trading212Converter:
                     if transaction_id
                     else "Trading212 interest payment"
                 ),
-                "Price": "",  # No price for interest transactions
+                "Value": f"{abs(total):.2f}",  # Value is the interest amount
                 "Transaction Commodity": "",
             }
         )
