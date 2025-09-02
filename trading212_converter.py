@@ -22,30 +22,26 @@ except ImportError:
 
 class Trading212Converter:
     """Main converter class for Trading212 CSV files."""
-    
+
     def __init__(self, config_file: Optional[Path] = None):
         """Initialize the converter with optional configuration file."""
         self.logger = logging.getLogger(__name__)
         self.config = self._load_config(config_file)
-        
+
     def _load_config(self, config_file: Optional[Path] = None) -> Dict:
         """Load configuration from file or use defaults."""
         default_config = {
-            "ticker_map": {
-                "ORA": "ORAN.PA",
-                "VOD": "VOD.L",
-                "MSFT": "MSFT"
-            },
-
+            "ticker_map": {"ORA": "ORAN.PA", "VOD": "VOD.L", "MSFT": "MSFT"},
             "expense_accounts": {
                 "conversion_fee": "Expenses:Currency Conversion Fees",
-                "french_tax": "Expenses:French Transaction Tax"
-            }
+                "french_tax": "Expenses:French Transaction Tax",
+            },
+            "deposit_account": "Assets:Trading212 Deposits",
         }
-        
+
         if config_file and config_file.exists():
             try:
-                with open(config_file, 'r') as f:
+                with open(config_file, "r") as f:
                     user_config = yaml.safe_load(f)
                     # Merge user config with defaults
                     for key, value in user_config.items():
@@ -59,66 +55,89 @@ class Trading212Converter:
                 self.logger.info("Using default configuration")
         else:
             self.logger.info("Using default configuration")
-            
+
         return default_config
-    
+
     def _validate_input_file(self, input_file: Path) -> bool:
         """Validate that the input file exists and has the expected format."""
         if not input_file.exists():
             self.logger.error(f"Input file does not exist: {input_file}")
             return False
-            
+
         try:
-            with open(input_file, 'r', newline='') as f:
+            with open(input_file, "r", newline="") as f:
                 reader = csv.DictReader(f)
                 headers = reader.fieldnames
-                
+
                 required_headers = [
-                    'Action', 'Time', 'ISIN', 'Ticker', 'Name', 'Notes', 'ID',
-                    'No. of shares', 'Price / share', 'Currency (Price / share)',
-                    'Exchange rate', 'Currency (Result)', 'Total', 'Currency (Total)',
-                    'Currency conversion fee', 'Currency (Currency conversion fee)',
-                    'French transaction tax', 'Currency (French transaction tax)'
+                    "Action",
+                    "Time",
+                    "ISIN",
+                    "Ticker",
+                    "Name",
+                    "Notes",
+                    "ID",
+                    "No. of shares",
+                    "Price / share",
+                    "Currency (Price / share)",
+                    "Exchange rate",
+                    "Currency (Result)",
+                    "Total",
+                    "Currency (Total)",
+                    "Currency conversion fee",
+                    "Currency (Currency conversion fee)",
+                    "French transaction tax",
+                    "Currency (French transaction tax)",
                 ]
-                
+
                 missing_headers = [h for h in required_headers if h not in headers]
                 if missing_headers:
                     self.logger.error(f"Missing required headers: {missing_headers}")
                     return False
-                    
+
         except Exception as e:
             self.logger.error(f"Error reading input file: {e}")
             return False
-            
+
         return True
-    
+
     def process_transactions(self, input_file: Path, output_file: Path) -> bool:
         """
         Process Trading212 CSV file and convert to GnuCash format.
-        
+
         Args:
             input_file: Path to the Trading212 CSV file
             output_file: Path for the output GnuCash CSV file
-            
+
         Returns:
             bool: True if processing was successful, False otherwise
         """
         if not self._validate_input_file(input_file):
             return False
-            
+
         try:
             # Define headers for GnuCash multi-split import
-            new_headers = ['Date', 'Description', 'Transfer Account', 'Amount', 'Memo', 'Price', 'Transaction Commodity']
-            
-            with open(input_file, 'r', newline='') as infile, \
-                 open(output_file, 'w', newline='') as outfile:
-                
+            new_headers = [
+                "Date",
+                "Description",
+                "Action",
+                "Account",
+                "Amount",
+                "Memo",
+                "Price",
+                "Transaction Commodity",
+            ]
+
+            with open(input_file, "r", newline="") as infile, open(
+                output_file, "w", newline=""
+            ) as outfile:
+
                 reader = csv.DictReader(infile)
                 writer = csv.DictWriter(outfile, fieldnames=new_headers)
                 writer.writeheader()
-                
+
                 processed_count = 0
-                
+
                 for row_num, row in enumerate(reader, 1):
                     try:
                         self._process_row(row, writer)
@@ -127,121 +146,197 @@ class Trading212Converter:
                         self.logger.error(f"Error processing row {row_num}: {e}")
                         self.logger.debug(f"Row data: {row}")
                         continue
-                        
-                self.logger.info(f"Successfully processed {processed_count} transactions")
+
+                self.logger.info(
+                    f"Successfully processed {processed_count} transactions"
+                )
                 self.logger.info(f"Output written to: {output_file}")
                 return True
-                
+
         except Exception as e:
             self.logger.error(f"Error processing file: {e}")
             return False
-    
+
     def _process_row(self, row: Dict, writer: csv.DictWriter) -> None:
         """Process a single row from the Trading212 CSV into multi-split format."""
         # Get data from original row
-        action = row['Action']
-        time = row['Time']
-        isin = row['ISIN']
-        ticker = row['Ticker']
-        name = row['Name']
-        
+        action = row["Action"]
+        time = row["Time"]
+        isin = row["ISIN"]
+        ticker = row["Ticker"]
+        name = row["Name"]
+
         try:
-            total = float(row['Total']) if row['Total'] else 0.0
-            conversion_fee = float(row['Currency conversion fee']) if row['Currency conversion fee'] else 0.0
-            num_shares = float(row['No. of shares']) if row['No. of shares'] else 0.0
-            price_per_share_original = float(row['Price / share']) if row['Price / share'] else 0.0
-            exchange_rate = float(row['Exchange rate']) if row['Exchange rate'] else 1.0
-            french_tax = float(row['French transaction tax']) if row.get('French transaction tax') else 0.0
+            total = float(row["Total"]) if row["Total"] else 0.0
+            conversion_fee = (
+                float(row["Currency conversion fee"])
+                if row["Currency conversion fee"]
+                else 0.0
+            )
+            num_shares = float(row["No. of shares"]) if row["No. of shares"] else 0.0
+            price_per_share_original = (
+                float(row["Price / share"]) if row["Price / share"] else 0.0
+            )
+            exchange_rate = float(row["Exchange rate"]) if row["Exchange rate"] else 1.0
+            french_tax = (
+                float(row["French transaction tax"])
+                if row.get("French transaction tax")
+                else 0.0
+            )
         except ValueError as e:
             raise ValueError(f"Invalid numeric value in row: {e}")
-        
+
         # Get currency information
-        price_currency = row.get('Currency (Price / share)', '')
-        total_currency = row.get('Currency (Total)', '')
-        
+        price_currency = row.get("Currency (Price / share)", "")
+        total_currency = row.get("Currency (Total)", "")
+
         # Calculate GBP price per share
         # If we have exchange rate information and the price is not already in GBP
-        if price_currency and price_currency != 'GBP' and exchange_rate != 0:
+        if price_currency and price_currency != "GBP" and exchange_rate != 0:
             # Convert original price to GBP using exchange rate
             price_per_share_gbp = price_per_share_original / exchange_rate
-        elif total_currency == 'GBP' and num_shares != 0:
+        elif total_currency == "GBP" and num_shares != 0:
             # Use the total amount method as fallback (total should be in GBP)
             price_per_share_gbp = abs(total) / num_shares
         else:
             # Assume price is already in GBP or no conversion needed
             price_per_share_gbp = price_per_share_original
-        
-        # Skip non-trading actions if needed
-        if action not in ['Market buy', 'Market sell', 'Limit buy', 'Limit sell']:
-            self.logger.debug(f"Skipping action: {action}")
+
+        # Handle different action types
+        if action == "Deposit":
+            self._process_deposit(row, writer, time, total, action)
             return
-        
-        # Perform lookups
-        yahoo_ticker = self.config['ticker_map'].get(ticker, ticker)
-        # Use just the company name for Transfer Account (GnuCash will handle the full path)
+        elif action in ["Market buy", "Market sell", "Limit buy", "Limit sell"]:
+            # Continue processing trading actions
+            pass
+        else:
+            # Error on unknown actions
+            raise ValueError(
+                f"Unknown action type: '{action}'. Supported actions are: Deposit, Market buy, Market sell, Limit buy, Limit sell"
+            )
+
+        # Perform lookups for trading actions
+        yahoo_ticker = self.config["ticker_map"].get(ticker, ticker)
+        # Get the unified transfer account (deposit account) for all transactions
+        transfer_account = self.config.get(
+            "deposit_account", "Assets:Trading212 Deposits"
+        )
+        # Use company name for the specific Account field
         company_name = name if name else ticker
-        
-        if ticker not in self.config['ticker_map']:
+
+        if ticker not in self.config["ticker_map"]:
             self.logger.warning(f"No ticker mapping found for {ticker}, using default")
-        
+
         # Calculate the net amount for the shares
         net_shares_amount = total - conversion_fee - french_tax
-        
+
         # Create transaction description (shared by all splits)
-        description = f"{action} {num_shares:.6f} shares of {name} ({ticker})" if name else f"{action} {num_shares:.6f} shares of {ticker}"
-        
+        description = (
+            f"{action} {num_shares:.6f} shares of {name} ({ticker})"
+            if name
+            else f"{action} {num_shares:.6f} shares of {ticker}"
+        )
+
         # Write multi-split transaction rows
         # All splits share the same date and description, but different Transfer Accounts
-        
+
         # Split 1: Main transaction (buy/sell shares)
         # For multi-split: Transfer Account is the destination (source account set during GnuCash import)
-        if action in ['Market buy', 'Limit buy']:
+        if action in ["Market buy", "Limit buy"]:
             # Buy: Positive number of shares being purchased
-            writer.writerow({
-                'Date': time,
-                'Description': description,
-                'Transfer Account': company_name,
-                'Amount': f"{num_shares:.6f}",
-                'Memo': f"Purchase of {num_shares:.6f} shares @ {yahoo_ticker}",
-                'Price': f"{price_per_share_gbp:.4f}",
-                'Transaction Commodity': yahoo_ticker
-            })
+            writer.writerow(
+                {
+                    "Date": time,
+                    "Description": description,
+                    "Action": action,
+                    "Account": company_name,
+                    "Amount": f"{num_shares:.6f}",
+                    "Memo": f"Purchase of {num_shares:.6f} shares @ {yahoo_ticker}",
+                    "Price": f"{price_per_share_gbp:.4f}",
+                    "Transaction Commodity": yahoo_ticker,
+                }
+            )
         else:  # Market sell, Limit sell
             # Sell: Negative number of shares being sold
-            writer.writerow({
-                'Date': time,
-                'Description': description,
-                'Transfer Account': company_name,
-                'Amount': f"-{num_shares:.6f}",
-                'Memo': f"Sale of {num_shares:.6f} shares @ {yahoo_ticker}",
-                'Price': f"{price_per_share_gbp:.4f}",
-                'Transaction Commodity': yahoo_ticker
-            })
-        
+            writer.writerow(
+                {
+                    "Date": time,
+                    "Description": description,
+                    "Action": action,
+                    "Account": company_name,
+                    "Amount": f"-{num_shares:.6f}",
+                    "Memo": f"Sale of {num_shares:.6f} shares @ {yahoo_ticker}",
+                    "Price": f"{price_per_share_gbp:.4f}",
+                    "Transaction Commodity": yahoo_ticker,
+                }
+            )
+
         # Split 2: Conversion fee (only if non-zero)
         if conversion_fee != 0:
-            writer.writerow({
-                'Date': time,
-                'Description': description,
-                'Transfer Account': self.config['expense_accounts']['conversion_fee'],
-                'Amount': f"-{abs(conversion_fee):.2f}",  # Negative amount for expense
-                'Memo': f"Currency conversion fee for {ticker}",
-                'Price': "",  # No price for expense transactions
-                'Transaction Commodity': ""
-            })
-        
+            writer.writerow(
+                {
+                    "Date": time,
+                    "Description": description,
+                    "Action": action,  # Same action as the main transaction
+                    "Account": self.config["expense_accounts"]["conversion_fee"],
+                    "Amount": f"-{abs(conversion_fee):.2f}",  # Negative amount for expense
+                    "Memo": f"Currency conversion fee for {ticker}",
+                    "Price": "",  # No price for expense transactions
+                    "Transaction Commodity": "",
+                }
+            )
+
         # Split 3: French transaction tax (only if non-zero)
         if french_tax != 0:
-            writer.writerow({
-                'Date': time,
-                'Description': description,
-                'Transfer Account': self.config['expense_accounts']['french_tax'],
-                'Amount': f"-{abs(french_tax):.2f}",  # Negative amount for expense
-                'Memo': f"French transaction tax for {ticker}",
-                'Price': "",  # No price for expense transactions
-                'Transaction Commodity': ""
-            })
+            writer.writerow(
+                {
+                    "Date": time,
+                    "Description": description,
+                    "Action": action,  # Same action as the main transaction
+                    "Account": self.config["expense_accounts"]["french_tax"],
+                    "Amount": f"-{abs(french_tax):.2f}",  # Negative amount for expense
+                    "Memo": f"French transaction tax for {ticker}",
+                    "Price": "",  # No price for expense transactions
+                    "Transaction Commodity": "",
+                }
+            )
 
+    def _process_deposit(
+        self, row: Dict, writer: csv.DictWriter, time: str, total: float, action: str
+    ) -> None:
+        """Process a deposit transaction from Trading212."""
+        # Extract deposit information
+        notes = row.get("Notes", "")
+        transaction_id = row.get("ID", "")
+
+        # Create description for deposit
+        description = f"Deposit from Trading212"
+        if notes:
+            description += f" - {notes}"
+
+        # Get deposit account from configuration
+        deposit_source = self.config.get(
+            "deposit_account", "Assets:Trading212 Deposits"
+        )
+
+        # Write the deposit transaction
+        # Positive amount as money is coming into the account
+        writer.writerow(
+            {
+                "Date": time,
+                "Description": description,
+                "Action": action,
+                "Account": deposit_source,  # Specific account for this deposit
+                "Amount": f"{abs(total):.2f}",  # Positive amount (money coming in)
+                "Memo": (
+                    f"Trading212 deposit - ID: {transaction_id}"
+                    if transaction_id
+                    else "Trading212 deposit"
+                ),
+                "Price": "",  # No price for deposit transactions
+                "Transaction Commodity": "",
+            }
+        )
 
 
 def setup_logging(verbose: bool = False) -> None:
@@ -249,8 +344,8 @@ def setup_logging(verbose: bool = False) -> None:
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=level,
-        format='%(levelname)s: %(message)s',
-        handlers=[logging.StreamHandler(sys.stdout)]
+        format="%(levelname)s: %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)],
     )
 
 
@@ -273,14 +368,19 @@ ticker_map:
 expense_accounts:
   conversion_fee: "Expenses:Currency Conversion Fees"
   french_tax: "Expenses:French Transaction Tax"
+
+# Account for deposits from Trading212
+deposit_account: "Assets:Trading212 Deposits"
 """
-    
-    with open(config_path, 'w') as f:
+
+    with open(config_path, "w") as f:
         f.write(sample_config_yaml)
-    
+
     print(f"Sample configuration file created at: {config_path}")
     print("Edit this file to customize your ticker and account mappings.")
-    print("The source account (bank/cash account) will be configured during GnuCash import.")
+    print(
+        "The source account (bank/cash account) will be configured during GnuCash import."
+    )
 
 
 def main():
@@ -299,61 +399,56 @@ Each Trading212 transaction becomes a multi-split transaction with:
 - Money transfer between your source account and investment accounts
 - Separate splits for fees and taxes
 The source account is configured during the GnuCash import process.
-        """
+        """,
     )
-    
+
     parser.add_argument(
-        'input_file',
-        nargs='?',
+        "input_file", nargs="?", type=Path, help="Input Trading212 CSV file"
+    )
+
+    parser.add_argument(
+        "output_file", nargs="?", type=Path, help="Output GnuCash CSV file"
+    )
+
+    parser.add_argument(
+        "-c",
+        "--config",
         type=Path,
-        help='Input Trading212 CSV file'
+        default=Path("trading212_config.yaml"),
+        help="Configuration file path (default: trading212_config.yaml)",
     )
-    
+
     parser.add_argument(
-        'output_file',
-        nargs='?',
-        type=Path,
-        help='Output GnuCash CSV file'
+        "--create-config",
+        action="store_true",
+        help="Create a sample configuration file and exit",
     )
-    
+
     parser.add_argument(
-        '-c', '--config',
-        type=Path,
-        default=Path('trading212_config.yaml'),
-        help='Configuration file path (default: trading212_config.yaml)'
+        "-v", "--verbose", action="store_true", help="Enable verbose logging"
     )
-    
-    parser.add_argument(
-        '--create-config',
-        action='store_true',
-        help='Create a sample configuration file and exit'
-    )
-    
-    parser.add_argument(
-        '-v', '--verbose',
-        action='store_true',
-        help='Enable verbose logging'
-    )
-    
+
     args = parser.parse_args()
-    
+
     setup_logging(args.verbose)
-    
+
     if args.create_config:
         create_sample_config(args.config)
         return 0
-    
+
     if not args.input_file or not args.output_file:
-        parser.error("Input and output files are required (unless using --create-config)")
-    
+        parser.error(
+            "Input and output files are required (unless using --create-config)"
+        )
+
     # Initialize converter
     converter = Trading212Converter(args.config)
-    
+
     # Process the file
     success = converter.process_transactions(args.input_file, args.output_file)
-    
+
     return 0 if success else 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())
