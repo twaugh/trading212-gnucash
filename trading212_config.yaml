@@ -15,3 +15,6 @@ ticker_map:
 expense_accounts:
   conversion_fee: "Expenses:Currency Conversion Fees"
   french_tax: "Expenses:French Transaction Tax"
+
+# Account for deposits from Trading212
+deposit_account: "Assets:Trading212 Deposits"
