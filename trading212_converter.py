@@ -35,6 +35,7 @@ class Trading212Converter:
             "expense_accounts": {
                 "conversion_fee": "Expenses:Currency Conversion Fees",
                 "french_tax": "Expenses:French Transaction Tax",
+                "stamp_duty_tax": "Expenses:Stamp Duty Reserve Tax",
             },
             "deposit_account": "Assets:Trading212 Deposits",
         }
@@ -69,7 +70,8 @@ class Trading212Converter:
                 reader = csv.DictReader(f)
                 headers = reader.fieldnames
 
-                required_headers = [
+                # Core required headers that should always be present
+                core_required_headers = [
                     "Action",
                     "Time",
                     "ISIN",
@@ -77,6 +79,10 @@ class Trading212Converter:
                     "Name",
                     "Notes",
                     "ID",
+                ]
+
+                # Trading-specific headers (required for buy/sell transactions)
+                trading_headers = [
                     "No. of shares",
                     "Price / share",
                     "Currency (Price / share)",
@@ -84,16 +90,45 @@ class Trading212Converter:
                     "Currency (Result)",
                     "Total",
                     "Currency (Total)",
+                ]
+
+                # Optional fee/tax headers (may or may not be present)
+                optional_fee_headers = [
                     "Currency conversion fee",
                     "Currency (Currency conversion fee)",
                     "French transaction tax",
                     "Currency (French transaction tax)",
+                    "Stamp duty reserve tax",
+                    "Currency (Stamp duty reserve tax)",
                 ]
 
-                missing_headers = [h for h in required_headers if h not in headers]
-                if missing_headers:
-                    self.logger.error(f"Missing required headers: {missing_headers}")
+                # Check for core headers
+                missing_core = [h for h in core_required_headers if h not in headers]
+                if missing_core:
+                    self.logger.error(f"Missing core required headers: {missing_core}")
                     return False
+
+                # Log which headers are present for debugging
+                self.logger.info(
+                    f"CSV contains {len(headers)} columns: {', '.join(headers)}"
+                )
+
+                # Check if we have trading headers (for transactions other than deposits)
+                has_trading_headers = all(h in headers for h in trading_headers)
+                if not has_trading_headers:
+                    self.logger.warning(
+                        "Some trading headers are missing. This may cause issues with buy/sell transactions."
+                    )
+                    self.logger.debug(
+                        f"Missing trading headers: {[h for h in trading_headers if h not in headers]}"
+                    )
+
+                # Log which optional fee headers are present
+                present_fee_headers = [h for h in optional_fee_headers if h in headers]
+                if present_fee_headers:
+                    self.logger.info(
+                        f"Fee/tax columns present: {', '.join(present_fee_headers)}"
+                    )
 
         except Exception as e:
             self.logger.error(f"Error reading input file: {e}")
@@ -170,7 +205,7 @@ class Trading212Converter:
             total = float(row["Total"]) if row["Total"] else 0.0
             conversion_fee = (
                 float(row["Currency conversion fee"])
-                if row["Currency conversion fee"]
+                if row.get("Currency conversion fee")
                 else 0.0
             )
             num_shares = float(row["No. of shares"]) if row["No. of shares"] else 0.0
@@ -178,11 +213,14 @@ class Trading212Converter:
                 float(row["Price / share"]) if row["Price / share"] else 0.0
             )
             exchange_rate = float(row["Exchange rate"]) if row["Exchange rate"] else 1.0
-            french_tax = (
-                float(row["French transaction tax"])
-                if row.get("French transaction tax")
-                else 0.0
-            )
+
+            # Handle different tax column names flexibly
+            transaction_tax = 0.0
+            if row.get("French transaction tax"):
+                transaction_tax = float(row["French transaction tax"])
+            elif row.get("Stamp duty reserve tax"):
+                transaction_tax = float(row["Stamp duty reserve tax"])
+
         except ValueError as e:
             raise ValueError(f"Invalid numeric value in row: {e}")
 
@@ -228,7 +266,7 @@ class Trading212Converter:
             self.logger.warning(f"No ticker mapping found for {ticker}, using default")
 
         # Calculate the net amount for the shares
-        net_shares_amount = total - conversion_fee - french_tax
+        net_shares_amount = total - conversion_fee - transaction_tax
 
         # Create transaction description (shared by all splits)
         description = (
@@ -286,16 +324,28 @@ class Trading212Converter:
                 }
             )
 
-        # Split 3: French transaction tax (only if non-zero)
-        if french_tax != 0:
+        # Split 3: Transaction tax (French tax or Stamp duty, only if non-zero)
+        if transaction_tax != 0:
+            # Determine which tax type we're dealing with
+            if row.get("French transaction tax"):
+                tax_account = self.config["expense_accounts"]["french_tax"]
+                tax_memo = f"French transaction tax for {ticker}"
+            elif row.get("Stamp duty reserve tax"):
+                tax_account = self.config["expense_accounts"]["stamp_duty_tax"]
+                tax_memo = f"Stamp duty reserve tax for {ticker}"
+            else:
+                # Fallback to French tax account if we can't determine the type
+                tax_account = self.config["expense_accounts"]["french_tax"]
+                tax_memo = f"Transaction tax for {ticker}"
+
             writer.writerow(
                 {
                     "Date": time,
                     "Description": description,
                     "Action": action,  # Same action as the main transaction
-                    "Account": self.config["expense_accounts"]["french_tax"],
-                    "Amount": f"-{abs(french_tax):.2f}",  # Negative amount for expense
-                    "Memo": f"French transaction tax for {ticker}",
+                    "Account": tax_account,
+                    "Amount": f"-{abs(transaction_tax):.2f}",  # Negative amount for expense
+                    "Memo": tax_memo,
                     "Price": "",  # No price for expense transactions
                     "Transaction Commodity": "",
                 }
@@ -368,6 +418,7 @@ ticker_map:
 expense_accounts:
   conversion_fee: "Expenses:Currency Conversion Fees"
   french_tax: "Expenses:French Transaction Tax"
+  stamp_duty_tax: "Expenses:Stamp Duty Reserve Tax"
 
 # Account for deposits from Trading212
 deposit_account: "Assets:Trading212 Deposits"
