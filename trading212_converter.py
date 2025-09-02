@@ -38,6 +38,7 @@ class Trading212Converter:
                 "stamp_duty_tax": "Expenses:Stamp Duty Reserve Tax",
             },
             "deposit_account": "Assets:Trading212 Deposits",
+            "interest_account": "Income:Trading212 Interest",
         }
 
         if config_file and config_file.exists():
@@ -194,15 +195,38 @@ class Trading212Converter:
 
     def _process_row(self, row: Dict, writer: csv.DictWriter) -> None:
         """Process a single row from the Trading212 CSV into multi-split format."""
-        # Get data from original row
+        # Get basic data from original row
         action = row["Action"]
         time = row["Time"]
+
+        # Parse total amount (required for all transaction types)
+        try:
+            total = float(row["Total"]) if row["Total"] else 0.0
+        except ValueError as e:
+            raise ValueError(f"Invalid total amount in row: {e}")
+
+        # Handle simple transaction types first (don't need trading-specific fields)
+        if action == "Deposit":
+            self._process_deposit(row, writer, time, total, action)
+            return
+        elif action == "Interest on cash":
+            self._process_interest(row, writer, time, total, action)
+            return
+        elif action in ["Market buy", "Market sell", "Limit buy", "Limit sell"]:
+            # Continue processing trading actions below
+            pass
+        else:
+            # Error on unknown actions
+            raise ValueError(
+                f"Unknown action type: '{action}'. Supported actions are: Deposit, Interest on cash, Market buy, Market sell, Limit buy, Limit sell"
+            )
+
+        # For trading actions, we need additional fields
         isin = row["ISIN"]
         ticker = row["Ticker"]
         name = row["Name"]
 
         try:
-            total = float(row["Total"]) if row["Total"] else 0.0
             conversion_fee = (
                 float(row["Currency conversion fee"])
                 if row.get("Currency conversion fee")
@@ -239,19 +263,6 @@ class Trading212Converter:
         else:
             # Assume price is already in GBP or no conversion needed
             price_per_share_gbp = price_per_share_original
-
-        # Handle different action types
-        if action == "Deposit":
-            self._process_deposit(row, writer, time, total, action)
-            return
-        elif action in ["Market buy", "Market sell", "Limit buy", "Limit sell"]:
-            # Continue processing trading actions
-            pass
-        else:
-            # Error on unknown actions
-            raise ValueError(
-                f"Unknown action type: '{action}'. Supported actions are: Deposit, Market buy, Market sell, Limit buy, Limit sell"
-            )
 
         # Perform lookups for trading actions
         yahoo_ticker = self.config["ticker_map"].get(ticker, ticker)
@@ -388,6 +399,43 @@ class Trading212Converter:
             }
         )
 
+    def _process_interest(
+        self, row: Dict, writer: csv.DictWriter, time: str, total: float, action: str
+    ) -> None:
+        """Process an interest on cash transaction from Trading212."""
+        # Extract interest information
+        notes = row.get("Notes", "")
+        transaction_id = row.get("ID", "")
+
+        # Create description for interest
+        description = f"Interest on cash from Trading212"
+        if notes:
+            description += f" - {notes}"
+
+        # Get interest account from configuration
+        interest_account = self.config.get(
+            "interest_account", "Income:Trading212 Interest"
+        )
+
+        # Write the interest transaction
+        # Positive amount as this is income
+        writer.writerow(
+            {
+                "Date": time,
+                "Description": description,
+                "Action": action,
+                "Account": interest_account,
+                "Amount": f"{abs(total):.2f}",  # Positive amount (income)
+                "Memo": (
+                    f"Trading212 interest - ID: {transaction_id}"
+                    if transaction_id
+                    else "Trading212 interest payment"
+                ),
+                "Price": "",  # No price for interest transactions
+                "Transaction Commodity": "",
+            }
+        )
+
 
 def setup_logging(verbose: bool = False) -> None:
     """Set up logging configuration."""
@@ -422,6 +470,9 @@ expense_accounts:
 
 # Account for deposits from Trading212
 deposit_account: "Assets:Trading212 Deposits"
+
+# Account for interest on cash from Trading212
+interest_account: "Income:Trading212 Interest"
 """
 
     with open(config_path, "w") as f:
