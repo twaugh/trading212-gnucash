@@ -155,13 +155,13 @@ class Trading212Converter:
             # Define headers for GnuCash multi-split import
             new_headers = [
                 "Date",
+                "Number",
                 "Description",
-                "Action",
-                "Account",
-                "Amount",
                 "Memo",
-                "Value",
+                "Account",
                 "Transaction Commodity",
+                "Amount",
+                "Value",
             ]
 
             with open(input_file, "r", newline="") as infile, open(
@@ -198,6 +198,7 @@ class Trading212Converter:
         # Get basic data from original row
         action = row["Action"]
         time = row["Time"]
+        transaction_id = row.get("ID", "")
 
         # Parse total amount (required for all transaction types)
         try:
@@ -207,10 +208,10 @@ class Trading212Converter:
 
         # Handle simple transaction types first (don't need trading-specific fields)
         if action == "Deposit":
-            self._process_deposit(row, writer, time, total, action)
+            self._process_deposit(row, writer, time, total, action, transaction_id)
             return
         elif action == "Interest on cash":
-            self._process_interest(row, writer, time, total, action)
+            self._process_interest(row, writer, time, total, action, transaction_id)
             return
         elif action in ["Market buy", "Market sell", "Limit buy", "Limit sell"]:
             # Continue processing trading actions below
@@ -296,13 +297,13 @@ class Trading212Converter:
             writer.writerow(
                 {
                     "Date": time,
+                    "Number": transaction_id,
                     "Description": description,
-                    "Action": action,
-                    "Account": company_name,
-                    "Amount": f"{num_shares:.6f}",
                     "Memo": f"Purchase of {num_shares:.6f} shares @ {yahoo_ticker}",
-                    "Value": f"{abs(net_shares_amount):.2f}",
+                    "Account": company_name,
                     "Transaction Commodity": yahoo_ticker,
+                    "Amount": f"{num_shares:.6f}",
+                    "Value": f"{abs(net_shares_amount):.2f}",
                 }
             )
         else:  # Market sell, Limit sell
@@ -310,13 +311,13 @@ class Trading212Converter:
             writer.writerow(
                 {
                     "Date": time,
+                    "Number": transaction_id,
                     "Description": description,
-                    "Action": action,
-                    "Account": company_name,
-                    "Amount": f"-{num_shares:.6f}",
                     "Memo": f"Sale of {num_shares:.6f} shares @ {yahoo_ticker}",
-                    "Value": f"{abs(net_shares_amount):.2f}",
+                    "Account": company_name,
                     "Transaction Commodity": yahoo_ticker,
+                    "Amount": f"-{num_shares:.6f}",
+                    "Value": f"{abs(net_shares_amount):.2f}",
                 }
             )
 
@@ -325,13 +326,13 @@ class Trading212Converter:
             writer.writerow(
                 {
                     "Date": time,
+                    "Number": transaction_id,
                     "Description": description,
-                    "Action": action,  # Same action as the main transaction
-                    "Account": self.config["expense_accounts"]["conversion_fee"],
-                    "Amount": "",  # Empty amount for expense transactions
                     "Memo": f"Currency conversion fee for {ticker}",
-                    "Value": f"{abs(conversion_fee):.2f}",  # Positive value for expense cost
+                    "Account": self.config["expense_accounts"]["conversion_fee"],
                     "Transaction Commodity": "",
+                    "Amount": "",  # Empty amount for expense transactions
+                    "Value": f"{abs(conversion_fee):.2f}",  # Positive value for expense cost
                 }
             )
 
@@ -352,23 +353,22 @@ class Trading212Converter:
             writer.writerow(
                 {
                     "Date": time,
+                    "Number": transaction_id,
                     "Description": description,
-                    "Action": action,  # Same action as the main transaction
-                    "Account": tax_account,
-                    "Amount": "",  # Empty amount for expense transactions
                     "Memo": tax_memo,
-                    "Value": f"{abs(transaction_tax):.2f}",  # Positive value for expense cost
+                    "Account": tax_account,
                     "Transaction Commodity": "",
+                    "Amount": "",  # Empty amount for expense transactions
+                    "Value": f"{abs(transaction_tax):.2f}",  # Positive value for expense cost
                 }
             )
 
     def _process_deposit(
-        self, row: Dict, writer: csv.DictWriter, time: str, total: float, action: str
+        self, row: Dict, writer: csv.DictWriter, time: str, total: float, action: str, transaction_id: str
     ) -> None:
         """Process a deposit transaction from Trading212."""
         # Extract deposit information
         notes = row.get("Notes", "")
-        transaction_id = row.get("ID", "")
 
         # Create description for deposit
         description = f"Deposit from Trading212"
@@ -385,27 +385,26 @@ class Trading212Converter:
         writer.writerow(
             {
                 "Date": time,
+                "Number": transaction_id,
                 "Description": description,
-                "Action": action,
-                "Account": deposit_source,  # Specific account for this deposit
-                "Amount": f"{abs(total):.2f}",  # Positive amount (money coming in)
                 "Memo": (
                     f"Trading212 deposit - ID: {transaction_id}"
                     if transaction_id
                     else "Trading212 deposit"
                 ),
-                "Value": f"{abs(total):.2f}",  # Value is the deposit amount
+                "Account": deposit_source,  # Specific account for this deposit
                 "Transaction Commodity": "",
+                "Amount": f"{abs(total):.2f}",  # Positive amount (money coming in)
+                "Value": f"{abs(total):.2f}",  # Value is the deposit amount
             }
         )
 
     def _process_interest(
-        self, row: Dict, writer: csv.DictWriter, time: str, total: float, action: str
+        self, row: Dict, writer: csv.DictWriter, time: str, total: float, action: str, transaction_id: str
     ) -> None:
         """Process an interest on cash transaction from Trading212."""
         # Extract interest information
         notes = row.get("Notes", "")
-        transaction_id = row.get("ID", "")
 
         # Create description for interest
         description = f"Interest on cash from Trading212"
@@ -422,17 +421,17 @@ class Trading212Converter:
         writer.writerow(
             {
                 "Date": time,
+                "Number": transaction_id,
                 "Description": description,
-                "Action": action,
-                "Account": interest_account,
-                "Amount": f"{abs(total):.2f}",  # Positive amount (income)
                 "Memo": (
                     f"Trading212 interest - ID: {transaction_id}"
                     if transaction_id
                     else "Trading212 interest payment"
                 ),
-                "Value": f"{abs(total):.2f}",  # Value is the interest amount
+                "Account": interest_account,
                 "Transaction Commodity": "",
+                "Amount": f"{abs(total):.2f}",  # Positive amount (income)
+                "Value": f"{abs(total):.2f}",  # Value is the interest amount
             }
         )
 
