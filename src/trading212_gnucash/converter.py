@@ -104,7 +104,7 @@ class Trading212Converter:
             for row_num, row in enumerate(reader, 1):
                 try:
                     # Clean up the row data - handle None values and empty strings
-                    cleaned_row = {}
+                    cleaned_row: dict[str, Optional[str]] = {}
                     for key, value in row.items():
                         if value is None or value == "":
                             cleaned_row[key] = None
@@ -113,7 +113,7 @@ class Trading212Converter:
                                 value.strip() if isinstance(value, str) else value
                             )
 
-                    transaction = Trading212Transaction(**cleaned_row)
+                    transaction = Trading212Transaction(**cleaned_row)  # type: ignore[arg-type]
                     yield transaction
 
                 except Exception as e:
@@ -211,7 +211,8 @@ class Trading212Converter:
             price_gbp = transaction.price_per_share
 
         # Get ticker mapping
-        gnucash_ticker = self.config.get_gnucash_ticker(transaction.ticker)
+        ticker = transaction.ticker or ""
+        gnucash_ticker = self.config.get_gnucash_ticker(ticker)
         if (
             gnucash_ticker == transaction.ticker
             and transaction.ticker not in self.config.ticker_map
@@ -306,7 +307,9 @@ class Trading212Converter:
             and transaction.exchange_rate
             and transaction.exchange_rate != 0
         ):
-            return transaction.price_per_share / transaction.exchange_rate
+            if transaction.price_per_share is not None:
+                return transaction.price_per_share / transaction.exchange_rate
+            return None
 
         # Method 2: Calculate from total amount
         if (

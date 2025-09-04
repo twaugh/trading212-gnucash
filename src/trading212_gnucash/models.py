@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 """
 
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -88,7 +88,7 @@ class Trading212Transaction(BaseModel):
 
     @field_validator("action")
     @classmethod
-    def validate_action(cls, v):
+    def validate_action(cls, v: str) -> str:
         """Validate that action is one of the supported types."""
         supported_actions = [
             "Market buy",
@@ -115,7 +115,7 @@ class Trading212Transaction(BaseModel):
         mode="before",
     )
     @classmethod
-    def parse_decimal(cls, v):
+    def parse_decimal(cls, v: Union[str, float, int, None]) -> Optional[Decimal]:
         """Parse decimal values, handling empty strings."""
         if v == "" or v is None:
             return None
@@ -138,7 +138,7 @@ class Trading212Transaction(BaseModel):
         mode="before",
     )
     @classmethod
-    def parse_string(cls, v):
+    def parse_string(cls, v: Optional[str]) -> Optional[str]:
         """Parse string values, handling None and empty strings."""
         if v is None or v == "":
             return None
@@ -187,7 +187,7 @@ class GnuCashSplit(BaseModel):
     amount: str = Field(default="", description="Amount (for shares)")
     value: str = Field(..., description="Value in base currency")
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, str]:
         """Convert to dictionary for CSV writing."""
         return {
             "Date": self.date,

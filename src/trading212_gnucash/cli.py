@@ -274,8 +274,8 @@ def info(input_file: Path) -> None:
             return
 
         # Summary statistics
-        action_counts = {}
-        ticker_counts = {}
+        action_counts: dict[str, int] = {}
+        ticker_counts: dict[str, int] = {}
         date_range = []
 
         for transaction in transactions:

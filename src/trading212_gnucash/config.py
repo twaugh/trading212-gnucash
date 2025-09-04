@@ -18,7 +18,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import os
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 import yaml
 from pydantic import BaseModel, Field
@@ -111,7 +111,7 @@ class Config(BaseModel):
     @classmethod
     def load_from_env(cls) -> "Config":
         """Load configuration from environment variables."""
-        config_data = {}
+        config_data: dict[str, Any] = {}
 
         # Load ticker mappings from environment
         ticker_map = {}
@@ -124,27 +124,28 @@ class Config(BaseModel):
             config_data["ticker_map"] = ticker_map
 
         # Load account configurations
-        if os.getenv("TRADING212_DEPOSIT_ACCOUNT"):
-            config_data["deposit_account"] = os.getenv("TRADING212_DEPOSIT_ACCOUNT")
+        deposit_account = os.getenv("TRADING212_DEPOSIT_ACCOUNT")
+        if deposit_account:
+            config_data["deposit_account"] = deposit_account
 
-        if os.getenv("TRADING212_INTEREST_ACCOUNT"):
-            config_data["interest_account"] = os.getenv("TRADING212_INTEREST_ACCOUNT")
+        interest_account = os.getenv("TRADING212_INTEREST_ACCOUNT")
+        if interest_account:
+            config_data["interest_account"] = interest_account
 
         # Load expense accounts
-        expense_accounts = {}
-        if os.getenv("TRADING212_CONVERSION_FEE_ACCOUNT"):
-            expense_accounts["conversion_fee"] = os.getenv(
-                "TRADING212_CONVERSION_FEE_ACCOUNT"
-            )
-        if os.getenv("TRADING212_FRENCH_TAX_ACCOUNT"):
-            expense_accounts["french_tax"] = os.getenv("TRADING212_FRENCH_TAX_ACCOUNT")
-        if os.getenv("TRADING212_STAMP_DUTY_ACCOUNT"):
-            expense_accounts["stamp_duty_tax"] = os.getenv(
-                "TRADING212_STAMP_DUTY_ACCOUNT"
-            )
+        expense_accounts: dict[str, str] = {}
+        conversion_fee_account = os.getenv("TRADING212_CONVERSION_FEE_ACCOUNT")
+        if conversion_fee_account:
+            expense_accounts["conversion_fee"] = conversion_fee_account
+        french_tax_account = os.getenv("TRADING212_FRENCH_TAX_ACCOUNT")
+        if french_tax_account:
+            expense_accounts["french_tax"] = french_tax_account
+        stamp_duty_account = os.getenv("TRADING212_STAMP_DUTY_ACCOUNT")
+        if stamp_duty_account:
+            expense_accounts["stamp_duty_tax"] = stamp_duty_account
 
         if expense_accounts:
-            config_data["expense_accounts"] = expense_accounts
+            config_data["expense_accounts"] = ExpenseAccounts(**expense_accounts)
 
         return cls(**config_data)
 
