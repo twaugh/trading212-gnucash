@@ -16,11 +16,10 @@ You should have received a copy of the GNU General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 """
 
-import pytest
 from decimal import Decimal
 
-from trading212_gnucash import Trading212Converter, Config
-from trading212_gnucash.models import Trading212Transaction, GnuCashSplit
+from trading212_gnucash import Config, Trading212Converter
+from trading212_gnucash.models import GnuCashSplit, Trading212Transaction
 
 
 def test_imports():
@@ -44,7 +43,7 @@ def test_converter_creation():
     """Test converter creation."""
     converter = Trading212Converter()
     assert converter.config is not None
-    
+
     config = Config()
     converter_with_config = Trading212Converter(config)
     assert converter_with_config.config == config
@@ -67,9 +66,9 @@ def test_transaction_model():
         "Exchange rate": "0.8",
         "Currency (Result)": "GBP",
         "Total": "1968.75",
-        "Currency (Total)": "GBP"
+        "Currency (Total)": "GBP",
     }
-    
+
     transaction = Trading212Transaction(**transaction_data)
     assert transaction.action == "Market buy"
     assert transaction.ticker == "MSFT"
@@ -78,14 +77,14 @@ def test_transaction_model():
     assert transaction.is_trading_action() is True
     assert transaction.is_buy_action() is True
     assert transaction.is_sell_action() is False
-    
+
     # Test that optional fields can be None
     minimal_data = {
         "Action": "Deposit",
-        "Time": "2025-01-01 10:00:00.000", 
+        "Time": "2025-01-01 10:00:00.000",
         "ID": "12345",
         "Total": "100.00",
-        "Currency (Total)": "GBP"
+        "Currency (Total)": "GBP",
     }
     deposit_transaction = Trading212Transaction(**minimal_data)
     assert deposit_transaction.action == "Deposit"
@@ -104,12 +103,12 @@ def test_gnucash_split_model():
         account="Assets:Stocks:MSFT",
         transaction_commodity="MSFT",
         amount="10.5",
-        value="1575.00"
+        value="1575.00",
     )
-    
+
     assert split.date == "2025-01-01 10:00:00.000"
     assert split.account == "Assets:Stocks:MSFT"
-    
+
     # Test dictionary conversion
     split_dict = split.to_dict()
     assert split_dict["Date"] == "2025-01-01 10:00:00.000"

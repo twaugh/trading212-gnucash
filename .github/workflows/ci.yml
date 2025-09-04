@@ -26,17 +26,17 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e ".[dev,test]"
     
-    #- name: Lint with ruff
-    #  run: |
-    #    ruff check src/ tests/
+    - name: Lint with ruff
+      run: |
+        ruff check src/ tests/
     
-    #- name: Check formatting with black
-    #  run: |
-    #    black --check src/ tests/
+    - name: Check formatting with black
+      run: |
+        black --check src/ tests/
     
-    #- name: Type check with mypy
-    #  run: |
-    #    mypy src/
+    - name: Type check with mypy
+      run: |
+        mypy src/
     
     - name: Test with pytest
       run: |
