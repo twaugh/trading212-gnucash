@@ -37,7 +37,7 @@ class Trading212Converter:
     def validate_csv_file(self, input_file: Union[str, Path]) -> bool:
         """Validate that the input CSV file has the expected format."""
         input_file = Path(input_file)
-        
+
         if not input_file.exists():
             self.logger.error(f"Input file does not exist: {input_file}")
             return False
@@ -49,8 +49,15 @@ class Trading212Converter:
 
                 # Core required headers
                 core_required_headers = [
-                    "Action", "Time", "ISIN", "Ticker", "Name", 
-                    "Notes", "ID", "Total", "Currency (Total)"
+                    "Action",
+                    "Time",
+                    "ISIN",
+                    "Ticker",
+                    "Name",
+                    "Notes",
+                    "ID",
+                    "Total",
+                    "Currency (Total)",
                 ]
 
                 # Check for core headers
@@ -64,10 +71,13 @@ class Trading212Converter:
 
                 # Check for trading-specific headers
                 trading_headers = [
-                    "No. of shares", "Price / share", "Currency (Price / share)",
-                    "Exchange rate", "Currency (Result)"
+                    "No. of shares",
+                    "Price / share",
+                    "Currency (Price / share)",
+                    "Exchange rate",
+                    "Currency (Result)",
                 ]
-                
+
                 missing_trading = [h for h in trading_headers if h not in headers]
                 if missing_trading:
                     self.logger.warning(
@@ -81,13 +91,15 @@ class Trading212Converter:
 
         return True
 
-    def read_transactions(self, input_file: Union[str, Path]) -> Iterator[Trading212Transaction]:
+    def read_transactions(
+        self, input_file: Union[str, Path]
+    ) -> Iterator[Trading212Transaction]:
         """Read and parse Trading 212 transactions from CSV file."""
         input_file = Path(input_file)
-        
+
         with open(input_file, "r", newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
-            
+
             for row_num, row in enumerate(reader, 1):
                 try:
                     # Clean up the row data - handle None values and empty strings
@@ -96,17 +108,21 @@ class Trading212Converter:
                         if value is None or value == "":
                             cleaned_row[key] = None
                         else:
-                            cleaned_row[key] = value.strip() if isinstance(value, str) else value
-                    
+                            cleaned_row[key] = (
+                                value.strip() if isinstance(value, str) else value
+                            )
+
                     transaction = Trading212Transaction(**cleaned_row)
                     yield transaction
-                    
+
                 except Exception as e:
                     self.logger.error(f"Error parsing row {row_num}: {e}")
                     self.logger.debug(f"Row data: {row}")
                     continue
 
-    def convert_transaction(self, transaction: Trading212Transaction) -> ConversionResult:
+    def convert_transaction(
+        self, transaction: Trading212Transaction
+    ) -> ConversionResult:
         """Convert a single Trading212 transaction to GnuCash splits."""
         try:
             if transaction.action == "Deposit":
@@ -117,14 +133,12 @@ class Trading212Converter:
                 return self._convert_trading_transaction(transaction)
             else:
                 return ConversionResult(
-                    splits=[],
-                    errors=[f"Unsupported action type: {transaction.action}"]
+                    splits=[], errors=[f"Unsupported action type: {transaction.action}"]
                 )
-                
+
         except Exception as e:
             return ConversionResult(
-                splits=[],
-                errors=[f"Error converting transaction: {e}"]
+                splits=[], errors=[f"Error converting transaction: {e}"]
             )
 
     def _convert_deposit(self, transaction: Trading212Transaction) -> ConversionResult:
@@ -133,7 +147,11 @@ class Trading212Converter:
         if transaction.notes:
             description += f" - {transaction.notes}"
 
-        memo = f"Trading 212 deposit - ID: {transaction.id}" if transaction.id else "Trading 212 deposit"
+        memo = (
+            f"Trading 212 deposit - ID: {transaction.id}"
+            if transaction.id
+            else "Trading 212 deposit"
+        )
 
         split = GnuCashSplit(
             date=transaction.time,
@@ -141,7 +159,7 @@ class Trading212Converter:
             description=description,
             memo=memo,
             account=self.config.deposit_account,
-            value=f"{abs(transaction.total):.2f}"
+            value=f"{abs(transaction.total):.2f}",
         )
 
         return ConversionResult(splits=[split])
@@ -152,7 +170,11 @@ class Trading212Converter:
         if transaction.notes:
             description += f" - {transaction.notes}"
 
-        memo = f"Trading 212 interest - ID: {transaction.id}" if transaction.id else "Trading 212 interest payment"
+        memo = (
+            f"Trading 212 interest - ID: {transaction.id}"
+            if transaction.id
+            else "Trading 212 interest payment"
+        )
 
         split = GnuCashSplit(
             date=transaction.time,
@@ -160,21 +182,25 @@ class Trading212Converter:
             description=description,
             memo=memo,
             account=self.config.interest_account,
-            value=f"{abs(transaction.total):.2f}"
+            value=f"{abs(transaction.total):.2f}",
         )
 
         return ConversionResult(splits=[split])
 
-    def _convert_trading_transaction(self, transaction: Trading212Transaction) -> ConversionResult:
+    def _convert_trading_transaction(
+        self, transaction: Trading212Transaction
+    ) -> ConversionResult:
         """Convert a trading transaction (buy/sell)."""
         splits = []
         warnings = []
 
         # Validate required fields for trading
-        if not all([transaction.num_shares, transaction.price_per_share, transaction.ticker]):
+        if not all(
+            [transaction.num_shares, transaction.price_per_share, transaction.ticker]
+        ):
             return ConversionResult(
                 splits=[],
-                errors=["Missing required trading data (shares, price, or ticker)"]
+                errors=["Missing required trading data (shares, price, or ticker)"],
             )
 
         # Calculate GBP price per share
@@ -185,7 +211,10 @@ class Trading212Converter:
 
         # Get ticker mapping
         gnucash_ticker = self.config.get_gnucash_ticker(transaction.ticker)
-        if gnucash_ticker == transaction.ticker and transaction.ticker not in self.config.ticker_map:
+        if (
+            gnucash_ticker == transaction.ticker
+            and transaction.ticker not in self.config.ticker_map
+        ):
             warnings.append(f"No ticker mapping found for {transaction.ticker}")
 
         # Calculate net amount for shares (total minus fees and taxes)
@@ -211,7 +240,7 @@ class Trading212Converter:
                 description=description,
                 memo=f"Currency conversion fee for {transaction.ticker}",
                 account=self.config.expense_accounts.conversion_fee,
-                value=f"{abs(conversion_fee):.2f}"
+                value=f"{abs(conversion_fee):.2f}",
             )
             splits.append(fee_split)
 
@@ -219,7 +248,7 @@ class Trading212Converter:
         if transaction_tax != 0:
             tax_type = transaction.get_tax_type()
             tax_account = self.config.get_tax_account(tax_type or "french")
-            
+
             if tax_type == "french":
                 tax_memo = f"French transaction tax for {transaction.ticker}"
             elif tax_type == "stamp_duty":
@@ -233,18 +262,18 @@ class Trading212Converter:
                 description=description,
                 memo=tax_memo,
                 account=tax_account,
-                value=f"{abs(transaction_tax):.2f}"
+                value=f"{abs(transaction_tax):.2f}",
             )
             splits.append(tax_split)
 
         return ConversionResult(splits=splits, warnings=warnings)
 
     def _create_share_split(
-        self, 
-        transaction: Trading212Transaction, 
-        description: str, 
-        gnucash_ticker: str, 
-        net_amount: Decimal
+        self,
+        transaction: Trading212Transaction,
+        description: str,
+        gnucash_ticker: str,
+        net_amount: Decimal,
     ) -> GnuCashSplit:
         """Create the main share transaction split."""
         if transaction.is_buy_action():
@@ -262,31 +291,35 @@ class Trading212Converter:
             account=transaction.name or transaction.ticker or "Unknown",
             transaction_commodity=gnucash_ticker,
             amount=amount,
-            value=f"{abs(net_amount):.2f}"
+            value=f"{abs(net_amount):.2f}",
         )
 
-    def _calculate_gbp_price(self, transaction: Trading212Transaction) -> Optional[Decimal]:
+    def _calculate_gbp_price(
+        self, transaction: Trading212Transaction
+    ) -> Optional[Decimal]:
         """Calculate GBP price per share using available exchange rate data."""
         # Method 1: Use exchange rate if available
-        if (transaction.price_currency and 
-            transaction.price_currency != "GBP" and 
-            transaction.exchange_rate and 
-            transaction.exchange_rate != 0):
+        if (
+            transaction.price_currency
+            and transaction.price_currency != "GBP"
+            and transaction.exchange_rate
+            and transaction.exchange_rate != 0
+        ):
             return transaction.price_per_share / transaction.exchange_rate
 
         # Method 2: Calculate from total amount
-        if (transaction.total_currency == "GBP" and 
-            transaction.num_shares and 
-            transaction.num_shares != 0):
+        if (
+            transaction.total_currency == "GBP"
+            and transaction.num_shares
+            and transaction.num_shares != 0
+        ):
             return abs(transaction.total) / transaction.num_shares
 
         # Method 3: Assume already in GBP
         return transaction.price_per_share
 
     def convert_file(
-        self, 
-        input_file: Union[str, Path], 
-        output_file: Union[str, Path]
+        self, input_file: Union[str, Path], output_file: Union[str, Path]
     ) -> bool:
         """Convert entire Trading212 CSV file to GnuCash format."""
         input_file = Path(input_file)
@@ -298,8 +331,14 @@ class Trading212Converter:
         try:
             # GnuCash multi-split CSV headers
             headers = [
-                "Date", "Number", "Description", "Memo", "Account",
-                "Transaction Commodity", "Amount", "Value"
+                "Date",
+                "Number",
+                "Description",
+                "Memo",
+                "Account",
+                "Transaction Commodity",
+                "Amount",
+                "Value",
             ]
 
             with open(output_file, "w", newline="", encoding="utf-8") as f:
@@ -312,7 +351,7 @@ class Trading212Converter:
 
                 for transaction in self.read_transactions(input_file):
                     result = self.convert_transaction(transaction)
-                    
+
                     if result.errors:
                         error_count += len(result.errors)
                         for error in result.errors:
@@ -322,7 +361,9 @@ class Trading212Converter:
                     if result.warnings:
                         warning_count += len(result.warnings)
                         for warning in result.warnings:
-                            self.logger.warning(f"Transaction {transaction.id}: {warning}")
+                            self.logger.warning(
+                                f"Transaction {transaction.id}: {warning}"
+                            )
 
                     # Write all splits for this transaction
                     for split in result.splits:
@@ -330,12 +371,14 @@ class Trading212Converter:
 
                     processed_count += 1
 
-                self.logger.info(f"Successfully processed {processed_count} transactions")
+                self.logger.info(
+                    f"Successfully processed {processed_count} transactions"
+                )
                 if error_count > 0:
                     self.logger.warning(f"Encountered {error_count} errors")
                 if warning_count > 0:
                     self.logger.info(f"Generated {warning_count} warnings")
-                
+
                 self.logger.info(f"Output written to: {output_file}")
                 return True
 
