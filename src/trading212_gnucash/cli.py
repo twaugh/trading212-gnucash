@@ -31,7 +31,6 @@ from . import __version__
 from .config import Config, create_sample_config
 from .converter import Trading212Converter
 
-
 console = Console()
 
 

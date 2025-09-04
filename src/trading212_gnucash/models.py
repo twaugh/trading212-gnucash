@@ -18,7 +18,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 from decimal import Decimal
 from typing import Optional
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class Trading212Transaction(BaseModel):
@@ -120,8 +121,8 @@ class Trading212Transaction(BaseModel):
             return None
         try:
             return Decimal(str(v))
-        except (ValueError, TypeError):
-            raise ValueError(f"Invalid decimal value: {v}")
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"Invalid decimal value: {v}") from e
 
     @field_validator(
         "isin",

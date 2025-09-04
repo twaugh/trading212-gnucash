@@ -18,9 +18,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import csv
 import logging
+from collections.abc import Iterator
 from decimal import Decimal
 from pathlib import Path
-from typing import Iterator, List, Optional, Union
+from typing import Optional, Union
 
 from .config import Config
 from .models import ConversionResult, GnuCashSplit, Trading212Transaction
@@ -43,7 +44,7 @@ class Trading212Converter:
             return False
 
         try:
-            with open(input_file, "r", newline="", encoding="utf-8") as f:
+            with open(input_file, newline="", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
                 headers = reader.fieldnames or []
 
@@ -97,7 +98,7 @@ class Trading212Converter:
         """Read and parse Trading 212 transactions from CSV file."""
         input_file = Path(input_file)
 
-        with open(input_file, "r", newline="", encoding="utf-8") as f:
+        with open(input_file, newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
 
             for row_num, row in enumerate(reader, 1):

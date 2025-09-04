@@ -22,7 +22,7 @@ __version__ = "2.0.0"
 __author__ = "Tim Waugh"
 __email__ = "twaugh@redhat.com"
 
-from .converter import Trading212Converter
 from .config import Config
+from .converter import Trading212Converter
 
 __all__ = ["Trading212Converter", "Config"]

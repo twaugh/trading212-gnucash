@@ -18,9 +18,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import os
 from pathlib import Path
-from typing import Dict, Optional, Union
+from typing import Optional, Union
+
 import yaml
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field
 
 
 class ExpenseAccounts(BaseModel):
@@ -43,7 +44,7 @@ class ExpenseAccounts(BaseModel):
 class Config(BaseModel):
     """Main configuration model."""
 
-    ticker_map: Dict[str, str] = Field(
+    ticker_map: dict[str, str] = Field(
         default_factory=lambda: {
             "ACME": "ACME.L",
             "VOD": "VOD.L",
@@ -96,7 +97,7 @@ class Config(BaseModel):
             return cls()  # Use defaults
 
         try:
-            with open(config_path, "r", encoding="utf-8") as f:
+            with open(config_path, encoding="utf-8") as f:
                 data = yaml.safe_load(f)
 
             if data is None:
@@ -105,7 +106,7 @@ class Config(BaseModel):
             return cls(**data)
 
         except (yaml.YAMLError, ValueError) as e:
-            raise ValueError(f"Error loading config file {config_path}: {e}")
+            raise ValueError(f"Error loading config file {config_path}: {e}") from e
 
     @classmethod
     def load_from_env(cls) -> "Config":
@@ -199,20 +200,20 @@ def create_sample_config(config_path: Union[str, Path]) -> None:
     sample_config.save_to_file(config_path)
 
     # Add comments to the generated file
-    with open(config_path, "r", encoding="utf-8") as f:
+    with open(config_path, encoding="utf-8") as f:
         content = f.read()
 
     commented_content = f"""# Trading 212 to GnuCash Multi-Split Converter Configuration
 # Edit this file to customize your ticker symbols and account mappings
 
 {content}
-# 
+#
 # Configuration Notes:
 # - ticker_map: Maps Trading 212 symbols to GnuCash stock symbols (may include exchange suffixes)
 # - expense_accounts: GnuCash accounts for fees and taxes
 # - deposit_account: Account for Trading 212 deposits
 # - interest_account: Account for interest payments
-# 
+#
 # The source account (bank/cash account) is configured during GnuCash import.
 """
 

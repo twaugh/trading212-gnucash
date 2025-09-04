@@ -16,11 +16,10 @@ You should have received a copy of the GNU General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 """
 
-import pytest
 from decimal import Decimal
 
-from trading212_gnucash import Trading212Converter, Config
-from trading212_gnucash.models import Trading212Transaction, GnuCashSplit
+from trading212_gnucash import Config, Trading212Converter
+from trading212_gnucash.models import GnuCashSplit, Trading212Transaction
 
 
 def test_imports():
