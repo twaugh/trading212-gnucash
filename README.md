@@ -1,3 +1,6 @@
+[![CI](https://github.com/twaugh/trading212-gnucash/actions/workflows/ci.yml/badge.svg)](https://github.com/twaugh/trading212-gnucash/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/twaugh/trading212-gnucash/branch/main/graph/badge.svg)](https://codecov.io/gh/twaugh/trading212-gnucash)
+
 # Trading 212 to GnuCash Converter
 
 A modern Python tool that converts Trading 212 CSV export files into a format suitable for importing into GnuCash. The converter creates multi-split transactions with separate entries for shares, currency conversion fees, and transaction taxes, with proper GBP currency conversion.
@@ -377,4 +380,17 @@ This ensures that the software remains free and open source, and any derivative 
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit issues, feature requests, or pull requests.
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+
+### Quick Start for Contributors
+
+1. Fork the repository
+2. Set up development environment: `pip install -e ".[dev]"`
+3. Run tests: `pytest --cov`
+4. Make your changes and add tests
+5. Submit a pull request
+
+### Reporting Issues
+
+- **Bug reports**: Use the [bug report template](.github/ISSUE_TEMPLATE/bug_report.md)
+- **Feature requests**: Use the [feature request template](.github/ISSUE_TEMPLATE/feature_request.md)
