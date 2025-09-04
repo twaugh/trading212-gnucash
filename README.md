@@ -1,42 +1,57 @@
-# Trading212 CSV to GnuCash Converter
+# Trading 212 to GnuCash Converter
 
-A modern Python tool that converts Trading212 CSV export files into a format suitable for importing into GnuCash. The converter creates multi-split transactions with separate entries for shares, currency conversion fees, and transaction taxes, with proper GBP currency conversion.
+A modern Python tool that converts Trading 212 CSV export files into a format suitable for importing into GnuCash. The converter creates multi-split transactions with separate entries for shares, currency conversion fees, and transaction taxes, with proper GBP currency conversion.
 
 ## Features
 
-- 🚀 **Modern CLI Interface** - Easy-to-use command-line interface with helpful options
 - ⚙️ **Configurable Mappings** - Customize ticker symbols and account mappings via YAML config
-- 💱 **Automatic Currency Conversion** - Converts prices to GBP using Trading212's exchange rates
 - 📊 **GnuCash Stock Import Ready** - Includes Price and Transaction Commodity columns for proper stock transactions
 - 🔄 **Multi-Split Transactions** - Creates proper multi-split entries for shares, fees, and taxes
-- 🛡️ **Error Handling** - Robust validation and error reporting
-- 📝 **Detailed Logging** - Comprehensive logging with optional verbose mode
-- 🔧 **Minimal Dependencies** - Only requires PyYAML (Python 3.7+)
+- 🛡️ **Type Safety** - Built with Pydantic models for robust data validation
+- 📝 **Rich Logging** - Beautiful logging with Rich library and detailed error reporting
+
+## Installation
+
+### From Source
+
+```bash
+git clone https://github.com/twaugh/trading212-gnucash
+cd trading212-gnucash
+pip install .
+```
+
+### Development Installation
+
+```bash
+git clone https://github.com/twaugh/trading212-gnucash
+cd trading212-gnucash
+pip install -e ".[dev]"
+```
 
 ## Quick Start
 
-### 1. Basic Usage
-
-Convert a Trading212 CSV file to GnuCash format:
-
-```bash
-python3 trading212_converter.py input.csv output.csv
-```
-
-### 2. Create Configuration File
+### 1. Create Configuration File
 
 Generate a sample configuration file to customize ticker and account mappings:
 
 ```bash
-python3 trading212_converter.py --create-config
+trading212-gnucash init-config
 ```
 
-This creates `trading212_config.yaml` with sample mappings that you can edit.
+This creates `~/.config/trading212-gnucash/config.yaml` with sample mappings that you can edit.
+
+### 2. Basic Usage
+
+Convert a Trading 212 CSV file to GnuCash format:
+
+```bash
+trading212-gnucash convert input.csv output.csv
+```
 
 ### 3. Use Custom Configuration
 
 ```bash
-python3 trading212_converter.py input.csv output.csv --config my_config.yaml
+trading212-gnucash convert input.csv output.csv --config my_config.yaml
 ```
 
 ### 4. Verbose Logging
@@ -44,28 +59,36 @@ python3 trading212_converter.py input.csv output.csv --config my_config.yaml
 Enable detailed logging for troubleshooting:
 
 ```bash
-python3 trading212_converter.py input.csv output.csv --verbose
+trading212-gnucash convert input.csv output.csv --verbose
+```
+
+### 5. Analyze Your Data
+
+Get information about your Trading212 CSV file:
+
+```bash
+trading212-gnucash info input.csv
 ```
 
 ## Configuration
 
-The tool uses a YAML configuration file to:
-- Map Trading212 ticker symbols to Yahoo Finance symbols (for portfolio tracking)
+The tool uses a YAML configuration file located at `~/.config/trading212-gnucash/config.yaml` to:
+- Map Trading 212 ticker symbols to GnuCash stock symbols (which may include exchange suffixes)
 - Configure expense accounts for fees and taxes
 
-### Sample Configuration (`trading212_config.yaml`)
+### Sample Configuration
 
 ```yaml
-# Trading212 to GnuCash Converter Configuration
+# Trading 212 to GnuCash Converter Configuration
 # Edit this file to customize your ticker symbols and account mappings
 
-# Map Trading212 ticker symbols to Yahoo Finance symbols
+# Map Trading 212 ticker symbols to GnuCash stock symbols
 ticker_map:
-  ORA: ORAN.PA      # Orange SA
-  VOD: VOD.L        # Vodafone Group PLC
-  MSFT: MSFT        # Microsoft Corporation
-  AAPL: AAPL        # Apple Inc.
-  GOOGL: GOOGL      # Alphabet Inc.
+  ACME: ACME.L      # Acme Corporation Ltd (London exchange)
+  VOD: VOD.L        # Vodafone Group PLC (London exchange)
+  MSFT: MSFT        # Microsoft Corporation (NASDAQ)
+  AAPL: AAPL        # Apple Inc. (NASDAQ)
+  GOOGL: GOOGL      # Alphabet Inc. (NASDAQ)
 
 # GnuCash accounts for fees and taxes
 # Note: For share transactions, Transfer Account uses company name directly (e.g., "Microsoft Corporation")
@@ -75,16 +98,30 @@ expense_accounts:
   french_tax: "Expenses:French Transaction Tax"
 ```
 
+### Configuration File Locations
+
+The tool looks for configuration files in the following order:
+
+1. `~/.config/trading212-gnucash/config.yaml` (recommended)
+2. `~/.config/trading212-gnucash/config.yml`
+3. `trading212_config.yaml` (current directory, legacy)
+4. `trading212_config.yml` (current directory, legacy)
+5. `~/.trading212_config.yaml` (home directory, legacy)
+
 ### Configuration Options
 
-- **`ticker_map`**: Maps Trading212 ticker symbols to Yahoo Finance symbols
+- **`ticker_map`**: Maps Trading 212 ticker symbols to GnuCash stock symbols (may include exchange suffixes like .L, .PA, etc.)
 - **`expense_accounts`**: Defines accounts for fees and taxes
+- **`deposit_account`**: Account for Trading 212 deposits
+- **`interest_account`**: Account for interest payments
 
-**Note**: For share transactions, the Transfer Account uses the company name directly (e.g., "Microsoft Corporation"). GnuCash will map this to the appropriate account during import.
+**Notes**: 
+- For share transactions, the Transfer Account uses the company name directly (e.g., "Microsoft Corporation"). GnuCash will map this to the appropriate account during import.
+- The ticker symbols in the mapping should match exactly what you have configured in GnuCash for each stock, including any exchange suffixes (e.g., `.L` for London Stock Exchange, `.PA` for Euronext Paris).
 
 ## Input Format
 
-The tool expects Trading212 CSV exports with the following columns:
+The tool expects Trading 212 CSV exports with the following columns:
 
 - `Action` - Transaction type (Market buy, Market sell, etc.)
 - `Time` - Transaction timestamp
@@ -115,19 +152,11 @@ The converter creates a GnuCash-compatible CSV for multi-split import with these
 - `Amount` - Transaction amount or share quantity
 - `Memo` - Additional details for each split
 - `Price` - Price per share in GBP (for stock transactions)
-- `Transaction Commodity` - Stock symbol (for stock transactions)
-
-### Currency Conversion
-
-The tool automatically converts prices to GBP using Trading212's exchange rate data:
-
-- **Method 1**: Uses `Exchange rate` field when available: `GBP Price = Original Price ÷ Exchange Rate`
-- **Method 2**: Calculates from total: `GBP Price = abs(Total in GBP) ÷ Number of Shares`
-- **Fallback**: Uses original price if no conversion data available
+- `Transaction Commodity` - Stock symbol as configured in GnuCash (for stock transactions)
 
 ### Output Structure
 
-Each Trading212 transaction becomes a multi-split transaction with separate splits for:
+Each Trading 212 transaction becomes a multi-split transaction with separate splits for:
 
 1. **Share Transaction** - The number of shares traded
    - **Buy orders**: Positive share quantity (shares acquired)
@@ -136,7 +165,7 @@ Each Trading212 transaction becomes a multi-split transaction with separate spli
    - **Transaction Commodity**: Yahoo Finance ticker symbol
 
 2. **Conversion Fee** - Separate split for currency conversion (negative amount, if non-zero)
-3. **French Transaction Tax** - Separate split for French tax (negative amount, if non-zero)
+3. **Transaction Tax** - Separate split for tax (negative amount, if non-zero)
 
 All splits share the same `Date` and `Description`, creating a single multi-split transaction.
 
@@ -159,9 +188,9 @@ During GnuCash import:
 
 ```csv
 Date,Description,Transfer Account,Amount,Memo,Price,Transaction Commodity
-2025-08-25 07:00:28.695,Market buy 0.905106 shares of Orange (ORA),Orange,0.905106,Purchase of 0.905106 shares @ ORAN.PA,14.5899,ORAN.PA
-2025-08-25 07:00:28.695,Market buy 0.905106 shares of Orange (ORA),Expenses:Currency Conversion Fees,-0.02,Currency conversion fee for ORA,,
-2025-08-25 07:00:28.695,Market buy 0.905106 shares of Orange (ORA),Expenses:French Transaction Tax,-0.05,French transaction tax for ORA,,
+2025-08-25 07:00:28.695,Market buy 0.905106 shares of Acme Corporation (ACME),Acme Corporation,0.905106,Purchase of 0.905106 shares @ ACME.L,14.5899,ACME.L
+2025-08-25 07:00:28.695,Market buy 0.905106 shares of Acme Corporation (ACME),Expenses:Currency Conversion Fees,-0.02,Currency conversion fee for ACME,,
+2025-08-25 07:00:28.695,Market buy 0.905106 shares of Acme Corporation (ACME),Expenses:French Transaction Tax,-0.05,French transaction tax for ACME,,
 ```
 
 This creates one multi-split transaction with three splits:
@@ -169,65 +198,86 @@ This creates one multi-split transaction with three splits:
 - **Conversion fee**: -0.02 GBP expense
 - **French tax**: -0.05 GBP expense
 
-## Command Line Options
+## Command Line Interface
 
-```
-usage: trading212_converter.py [-h] [-c CONFIG] [--create-config] [-v] 
-                              [input_file] [output_file]
+The tool provides several commands for different operations:
 
-Convert Trading212 CSV exports to GnuCash format
+### Main Commands
 
-positional arguments:
-  input_file            Input Trading212 CSV file
-  output_file           Output GnuCash CSV file
+```bash
+# Convert CSV files
+trading212-gnucash convert input.csv output.csv
 
-options:
-  -h, --help            show this help message and exit
-  -c CONFIG, --config CONFIG
-                        Configuration file path (default: trading212_config.yaml)
-  --create-config       Create a sample configuration file and exit
-  -v, --verbose         Enable verbose logging
+# Create sample configuration
+trading212-gnucash init-config
 
-Examples:
-  trading212_converter.py input.csv output.csv
-  trading212_converter.py input.csv output.csv --config my_config.yaml
-  trading212_converter.py --create-config
+# Analyze CSV file
+trading212-gnucash info input.csv
+
+# Validate configuration
+trading212-gnucash validate-config
+
+# Show help
+trading212-gnucash --help
 ```
 
-## Installation
+### Command Options
+
+#### Convert Command
+```bash
+trading212-gnucash convert [OPTIONS] INPUT_FILE OUTPUT_FILE
+
+Options:
+  -c, --config PATH    Configuration file path
+  -v, --verbose        Enable verbose logging
+  --validate-only      Only validate input file, don't convert
+  --help              Show help and exit
+```
+
+#### Init-Config Command
+```bash
+trading212-gnucash init-config [OPTIONS]
+
+Options:
+  -c, --config PATH    Configuration file path to create
+  --force             Overwrite existing configuration file
+  --help              Show help and exit
+```
+
+## Development
 
 ### Prerequisites
 
-- Python 3.7 or higher
-- PyYAML library
+- Python 3.9 or higher
+- pip (Python package installer)
 
-### Setup
+### Setup for Development
 
-1. Clone or download the repository:
+1. Clone the repository:
    ```bash
-   git clone <repository-url>
-   cd fix-trading212-csv
+   git clone https://github.com/twaugh/trading212-gnucash
+   cd trading212-gnucash
    ```
 
-2. Install dependencies:
+2. Install in development mode with dev dependencies:
    ```bash
-   pip install -r requirements.txt
-   # or just: pip install PyYAML
+   pip install -e ".[dev]"
    ```
 
-3. Make the script executable (optional):
+3. Run tests:
    ```bash
-   chmod +x trading212_converter.py
+   pytest
    ```
 
-4. Create your configuration file:
+4. Run type checking:
    ```bash
-   python3 trading212_converter.py --create-config
+   mypy src/
    ```
 
-5. Edit the configuration file to match your needs:
+5. Format code:
    ```bash
-   nano trading212_config.yaml
+   black src/ tests/
+   ruff check src/ tests/
    ```
 
 ## Examples
@@ -236,24 +286,35 @@ Examples:
 
 ```bash
 # Convert with default settings
-python3 trading212_converter.py trading212_export.csv gnucash_import.csv
+trading212-gnucash convert trading212_export.csv gnucash_import.csv
 ```
 
 ### Example 2: Custom Configuration
 
 ```bash
-# Create custom config
-python3 trading212_converter.py --create-config --config my_trading_config.yaml
+# Create custom config in a specific location
+trading212-gnucash init-config --config ~/my_trading_config.yaml
 
 # Use custom config
-python3 trading212_converter.py trading212_export.csv gnucash_import.csv --config my_trading_config.yaml
+trading212-gnucash convert trading212_export.csv gnucash_import.csv --config ~/my_trading_config.yaml
+
+# Or use the default config location (recommended)
+trading212-gnucash init-config  # Creates ~/.config/trading212-gnucash/config.yaml
+trading212-gnucash convert trading212_export.csv gnucash_import.csv  # Uses default config
 ```
 
 ### Example 3: Verbose Logging
 
 ```bash
 # Enable detailed logging for troubleshooting
-python3 trading212_converter.py trading212_export.csv gnucash_import.csv --verbose
+trading212-gnucash convert trading212_export.csv gnucash_import.csv --verbose
+```
+
+### Example 4: File Analysis
+
+```bash
+# Analyze your Trading 212 CSV file before conversion
+trading212-gnucash info trading212_export.csv
 ```
 
 ## Currency Conversion Details
@@ -277,8 +338,9 @@ The tool automatically detects the source currency and applies the appropriate c
 ### Common Issues
 
 1. **Missing Required Headers**
-   - Ensure your Trading212 CSV has all required columns
+   - Ensure your Trading 212 CSV has all required columns
    - Check that column names match exactly (case-sensitive)
+   - Note: Some columns (like ISIN, Ticker, Name) may be empty for non-trading transactions (deposits, interest) - this is normal
 
 2. **Invalid Numeric Values**
    - Verify that numeric columns contain valid numbers
@@ -297,7 +359,7 @@ The tool automatically detects the source currency and applies the appropriate c
 Run with `--verbose` flag to see detailed processing information:
 
 ```bash
-python3 trading212_converter.py input.csv output.csv --verbose
+trading212-gnucash convert input.csv output.csv --verbose
 ```
 
 This will show:
@@ -309,7 +371,9 @@ This will show:
 
 ## License
 
-This project is open source. Feel free to modify and distribute according to your needs.
+This project is licensed under the GNU General Public License v3.0 or later (GPLv3+). See the [LICENSE](LICENSE) file for details.
+
+This ensures that the software remains free and open source, and any derivative works must also be distributed under the same license terms.
 
 ## Contributing
 
